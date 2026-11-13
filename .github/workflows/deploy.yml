@@ -1,0 +1,41 @@
+name: Deploy web
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npx create-expo-app@latest site --template blank --no-install --yes
+      - name: Build web app
+        working-directory: site
+        env:
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          cp ../App.js App.js
+          npm install
+          npx expo install react-dom react-native-web @expo/metro-runtime react-native-svg @react-native-async-storage/async-storage
+          node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('app.json','utf8'));j.expo.web={bundler:'metro',output:'single'};j.expo.experiments={...(j.expo.experiments||{}),baseUrl:'/'+process.env.REPO};fs.writeFileSync('app.json',JSON.stringify(j,null,2))"
+          npx expo export --platform web
+          touch dist/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
